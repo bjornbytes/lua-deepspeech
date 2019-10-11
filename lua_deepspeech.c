@@ -13,6 +13,12 @@
 
 #define CHECK(c, ...) if (!(c)) { return luaL_error(L, __VA_ARGS__); }
 
+#ifdef _WIN32
+#define LDS_EXPORT __declspec(dllexport)
+#else
+#define LDS_EXPORT
+#endif
+
 static struct {
   ModelState* modelState;
   size_t bufferSize;
@@ -101,6 +107,14 @@ static int lds_init(lua_State* L) {
   return 1;
 }
 
+static int lds_destroy(lua_State* L) {
+  if (state.modelState) {
+    DS_DestroyModel(state.modelState);
+    state.modelState = NULL;
+  }
+  return 0;
+}
+
 static int lds_decode(lua_State* L) {
   size_t sampleCount;
   CHECK(state.modelState != NULL, "DeepSpeech is not initialized");
@@ -154,6 +168,12 @@ static int lds_stream_clear(lua_State* L) {
   return 0;
 }
 
+static int lds_stream_destroy(lua_State* L) {
+  lds_Stream* stream = (lds_Stream*) luaL_checkudata(L, 1, "lds_Stream");
+  DS_DiscardStream(stream->handle);
+  return 0;
+}
+
 static const luaL_Reg lds_api[] = {
   { "init", lds_init },
   { "decode", lds_decode },
@@ -166,12 +186,21 @@ static const luaL_Reg lds_stream_api[] = {
   { "decode", lds_stream_decode },
   { "finish", lds_stream_finish },
   { "clear", lds_stream_clear },
+  { "__gc", lds_stream_destroy },
   { NULL, NULL }
 };
 
-int luaopen_deepspeech(lua_State* L) {
+LDS_EXPORT int luaopen_deepspeech(lua_State* L) {
   lua_newtable(L);
   luaL_register(L, NULL, lds_api);
+
+  // Add sentinel userdata to free the model state on GC
+  lua_newuserdata(L, sizeof(void*));
+  lua_createtable(L, 0, 1);
+  lua_pushcfunction(L, lds_destroy);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_setfield(L, -2, "");
 
   if (luaL_newmetatable(L, "lds_Stream")) {
     lua_pushvalue(L, -1);

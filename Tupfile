@@ -1,18 +1,23 @@
-# Lua flags
-# Replace the pkg-config invocation with custom -I flags if you need them
-CFLAGS += `pkg-config --cflags lua5.1`
+CFLAGS += @(LUA_CFLAGS)
+LFLAGS += @(LUA_LFLAGS)
 
-# DeepSpeech flags
-# You can set the $DEEPSPEECH env var or just change the variable to point at a DeepSpeech release
-# The 'undefined dynamic_lookup' stuff lets us link against Lua and DeepSpeech at runtime, so make
-# sure your executable includes Lua and is otherwise able to find the DeepSpeech shared library.
-DEEPSPEECH = $DEEPSPEECH
-CFLAGS += -I$(DEEPSPEECH)
-LDFLAGS += -undefined dynamic_lookup -L$(DEEPSPEECH) -ldeepspeech
-export DEEPSPEECH
+CFLAGS += -I@(NATIVE_CLIENT_PATH)
+LFLAGS += -L@(NATIVE_CLIENT_PATH)
+
+ifeq (@(TUP_PLATFORM),win32)
+  LFLAGS += -llibdeepspeech.so.if
+  EXT = dll
+  OTHERS = lua-deepspeech.lib lua-deepspeech.exp
+else
+  # The 'undefined dynamic_lookup' stuff lets us link against Lua and DeepSpeech at runtime, so make
+  # sure your executable includes Lua and is otherwise able to find the DeepSpeech shared library.
+  # On windows, you just need to put the dlls next to the executable
+  LFLAGS += -undefined dynamic_lookup -ldeepspeech
+  EXT = so
+endif
 
 !compile = |> ^ CC %f^ clang $(CFLAGS) -c %f -o %o |>
-!link = |> ^ LN %o^ clang -shared -o %o $(LDFLAGS) %f |>
+!link = |> ^ LN %o^ clang -shared -o %o $(LFLAGS) %f |>
 
 : lua_deepspeech.c |> !compile |> lua_deepspeech.o
-: lua_deepspeech.o |> !link |> lua-deepspeech.so
+: lua_deepspeech.o |> !link |> lua-deepspeech.$(EXT) | $(OTHERS)

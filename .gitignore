@@ -1,3 +1,7 @@
 .tup
+tup.config
 *.o
 *.so
+*.dll
+*.lib
+*.exp
