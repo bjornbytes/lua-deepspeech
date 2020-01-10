@@ -6,10 +6,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define N_CEP 26
-#define N_CONTEXT 9
+#ifndef BEAM_WIDTH
 #define BEAM_WIDTH 500
-#define SAMPLE_RATE 16000
+#endif
 
 #define CHECK(c, ...) if (!(c)) { return luaL_error(L, __VA_ARGS__); }
 
@@ -28,6 +27,28 @@ static struct {
 typedef struct {
   StreamingState* handle;
 } lds_Stream;
+
+static const char* stringifyError(int e) {
+#define CASE(c) case c: return #c
+  switch (e) {
+    CASE(DS_ERR_OK);
+    CASE(DS_ERR_NO_MODEL);
+    CASE(DS_ERR_INVALID_ALPHABET);
+    CASE(DS_ERR_INVALID_SHAPE);
+    CASE(DS_ERR_INVALID_LM);
+    CASE(DS_ERR_MODEL_INCOMPATIBLE);
+    CASE(DS_ERR_FAIL_INIT_MMAP);
+    CASE(DS_ERR_FAIL_INIT_SESS);
+    CASE(DS_ERR_FAIL_INTERPRETER);
+    CASE(DS_ERR_FAIL_RUN_SESS);
+    CASE(DS_ERR_FAIL_CREATE_STREAM);
+    CASE(DS_ERR_FAIL_READ_PROTOBUF);
+    CASE(DS_ERR_FAIL_CREATE_SESS);
+    CASE(DS_ERR_FAIL_CREATE_MODEL);
+  }
+  return NULL;
+#undef CASE
+}
 
 static const short* lds_checksamples(lua_State* L, int index, size_t* count) {
   if (lua_istable(L, index)) {
@@ -63,25 +84,19 @@ static int lds_init(lua_State* L) {
   luaL_argcheck(L, lua_istable(L, 1), 1, "Expected config to be a table");
 
   if (state.modelState) {
-    DS_DestroyModel(state.modelState);
+    DS_FreeModel(state.modelState);
     state.modelState = NULL;
   }
 
   const char* model = NULL;
-  const char* alphabet = NULL;
   const char* grammar = NULL;
   const char* trie = NULL;
 
   int type;
 
   lua_getfield(L, 1, "model");
-  CHECK(lua_type(L, -1) == LUA_TSTRING, "config.model should be a string");
+  CHECK(lua_type(L, -1) == LUA_TSTRING, "config.model should be a string containing a path to the pbmm file");
   model = lua_tostring(L, -1);
-  lua_pop(L, 1);
-
-  lua_getfield(L, 1, "alphabet");
-  CHECK(lua_type(L, -1) == LUA_TSTRING, "config.alphabet should be a string");
-  alphabet = lua_tostring(L, -1);
   lua_pop(L, 1);
 
   lua_getfield(L, 1, "grammar");
@@ -97,10 +112,13 @@ static int lds_init(lua_State* L) {
   trie = lua_tostring(L, -1);
   lua_pop(L, 1);
 
-  CHECK(DS_CreateModel(model, N_CEP, N_CONTEXT, alphabet, BEAM_WIDTH, &state.modelState) == 0, "DeepSpeech failed to initialize");
+  int err = DS_CreateModel(model, BEAM_WIDTH, &state.modelState);
+  if (err) {
+    return luaL_error(L, "Failed to initialize DeepSpeech: %s", stringifyError(err));
+  }
 
   if (grammar) {
-    CHECK(DS_EnableDecoderWithLM(state.modelState, alphabet, grammar, trie, 1.f, 1.f) == 0, "Failed to set grammar");
+    CHECK(DS_EnableDecoderWithLM(state.modelState, grammar, trie, 1.f, 1.f) == 0, "Failed to set grammar");
   }
 
   lua_pushboolean(L, true);
@@ -109,10 +127,16 @@ static int lds_init(lua_State* L) {
 
 static int lds_destroy(lua_State* L) {
   if (state.modelState) {
-    DS_DestroyModel(state.modelState);
+    DS_FreeModel(state.modelState);
     state.modelState = NULL;
   }
   return 0;
+}
+
+static int lds_getSampleRate(lua_State* L) {
+  CHECK(state.modelState != NULL, "DeepSpeech is not initialized");
+  lua_pushinteger(L, DS_GetModelSampleRate(state.modelState));
+  return 1;
 }
 
 static int lds_decode(lua_State* L) {
@@ -120,7 +144,7 @@ static int lds_decode(lua_State* L) {
   CHECK(state.modelState != NULL, "DeepSpeech is not initialized");
   const short* samples = lds_checksamples(L, 1, &sampleCount);
   CHECK(samples != NULL, "Expected a table or lightuserdata pointer for audio sample data");
-  char* text = DS_SpeechToText(state.modelState, samples, sampleCount, SAMPLE_RATE);
+  char* text = DS_SpeechToText(state.modelState, samples, sampleCount);
   lua_pushstring(L, text);
   DS_FreeString(text);
   return 1;
@@ -129,13 +153,13 @@ static int lds_decode(lua_State* L) {
 static int lds_newStream(lua_State* L) {
   CHECK(state.modelState != NULL, "DeepSpeech is not initialized");
   lds_Stream* stream = (lds_Stream*) lua_newuserdata(L, sizeof(lds_Stream));
-  CHECK(DS_SetupStream(state.modelState, SAMPLE_RATE, &stream->handle) == 0, "Could not create stream");
+  CHECK(DS_CreateStream(state.modelState, &stream->handle) == 0, "Could not create stream");
   luaL_getmetatable(L, "lds_Stream");
   lua_setmetatable(L, -2);
   return 1;
 }
 
-static int lds_stream_push(lua_State* L) {
+static int lds_stream_feed(lua_State* L) {
   size_t sampleCount;
   lds_Stream* stream = (lds_Stream*) luaL_checkudata(L, 1, "lds_Stream");
   const short* samples = lds_checksamples(L, 2, &sampleCount);
@@ -157,32 +181,33 @@ static int lds_stream_finish(lua_State* L) {
   char* text = DS_FinishStream(stream->handle);
   lua_pushstring(L, text);
   DS_FreeString(text);
-  DS_SetupStream(state.modelState, SAMPLE_RATE, &stream->handle);
+  DS_CreateStream(state.modelState, &stream->handle);
   return 1;
 }
 
 static int lds_stream_clear(lua_State* L) {
   lds_Stream* stream = (lds_Stream*) luaL_checkudata(L, 1, "lds_Stream");
-  DS_DiscardStream(stream->handle);
-  DS_SetupStream(state.modelState, SAMPLE_RATE, &stream->handle);
+  DS_FreeStream(stream->handle);
+  DS_CreateStream(state.modelState, &stream->handle);
   return 0;
 }
 
 static int lds_stream_destroy(lua_State* L) {
   lds_Stream* stream = (lds_Stream*) luaL_checkudata(L, 1, "lds_Stream");
-  DS_DiscardStream(stream->handle);
+  DS_FreeStream(stream->handle);
   return 0;
 }
 
 static const luaL_Reg lds_api[] = {
   { "init", lds_init },
+  { "getSampleRate", lds_getSampleRate },
   { "decode", lds_decode },
   { "newStream", lds_newStream },
   { NULL, NULL },
 };
 
 static const luaL_Reg lds_stream_api[] = {
-  { "push", lds_stream_push },
+  { "feed", lds_stream_feed },
   { "decode", lds_stream_decode },
   { "finish", lds_stream_finish },
   { "clear", lds_stream_clear },
