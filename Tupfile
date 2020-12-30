@@ -4,10 +4,6 @@ LFLAGS += @(LUA_LFLAGS)
 CFLAGS += -I@(NATIVE_CLIENT_PATH)
 LFLAGS += -L@(NATIVE_CLIENT_PATH)
 
-ifdef (@(BEAM_WIDTH))
-  CFLAGS += -DBEAM_WIDTH=@(BEAM_WIDTH)
-endif
-
 ifeq (@(TUP_PLATFORM),win32)
   LFLAGS += -llibdeepspeech.so.if
   EXT = dll

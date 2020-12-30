@@ -6,10 +6,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#ifndef BEAM_WIDTH
-#define BEAM_WIDTH 500
-#endif
-
 #define CHECK(c, ...) if (!(c)) { return luaL_error(L, __VA_ARGS__); }
 
 #ifdef _WIN32
@@ -29,22 +25,9 @@ typedef struct {
 } lds_Stream;
 
 static const char* stringifyError(int e) {
-#define CASE(c) case c: return #c
+#define CASE(name, id, desc) case name: return desc;
   switch (e) {
-    CASE(DS_ERR_OK);
-    CASE(DS_ERR_NO_MODEL);
-    CASE(DS_ERR_INVALID_ALPHABET);
-    CASE(DS_ERR_INVALID_SHAPE);
-    CASE(DS_ERR_INVALID_LM);
-    CASE(DS_ERR_MODEL_INCOMPATIBLE);
-    CASE(DS_ERR_FAIL_INIT_MMAP);
-    CASE(DS_ERR_FAIL_INIT_SESS);
-    CASE(DS_ERR_FAIL_INTERPRETER);
-    CASE(DS_ERR_FAIL_RUN_SESS);
-    CASE(DS_ERR_FAIL_CREATE_STREAM);
-    CASE(DS_ERR_FAIL_READ_PROTOBUF);
-    CASE(DS_ERR_FAIL_CREATE_SESS);
-    CASE(DS_ERR_FAIL_CREATE_MODEL);
+    DS_FOR_EACH_ERROR(CASE)
   }
   return NULL;
 #undef CASE
@@ -90,7 +73,6 @@ static int lds_init(lua_State* L) {
 
   const char* model = NULL;
   const char* grammar = NULL;
-  const char* trie = NULL;
 
   int type;
 
@@ -105,20 +87,13 @@ static int lds_init(lua_State* L) {
   grammar = lua_tostring(L, -1);
   lua_pop(L, 1);
 
-  lua_getfield(L, 1, "trie");
-  type = lua_type(L, -1);
-  CHECK((grammar == NULL) == (type == LUA_TNIL), "config.trie is required when config.grammar is set");
-  CHECK((grammar == NULL) || type == LUA_TSTRING, "config.trie should be a string");
-  trie = lua_tostring(L, -1);
-  lua_pop(L, 1);
-
-  int err = DS_CreateModel(model, BEAM_WIDTH, &state.modelState);
+  int err = DS_CreateModel(model, &state.modelState);
   if (err) {
     return luaL_error(L, "Failed to initialize DeepSpeech: %s", stringifyError(err));
   }
 
   if (grammar) {
-    CHECK(DS_EnableDecoderWithLM(state.modelState, grammar, trie, 1.f, 1.f) == 0, "Failed to set grammar");
+    CHECK(DS_EnableExternalScorer(state.modelState, grammar) == 0, "Failed to set grammar");
   }
 
   lua_pushboolean(L, true);
