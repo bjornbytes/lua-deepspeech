@@ -1,3 +1,0 @@
-CONFIG_LUA_CFLAGS=`pkg-config --cflags lua5.1`
-CONFIG_LUA_LFLAGS=
-CONFIG_NATIVE_CLIENT_PATH=/path/to/native_client
