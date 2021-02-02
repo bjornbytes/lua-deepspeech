@@ -1,0 +1,49 @@
+name: workflow
+
+on: push
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            deepspeech-os: linux
+            toolchain: ''
+          - os: windows-latest
+            deepspeech-os: win
+            toolchain: -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+    runs-on: ${{matrix.os}}
+
+    env:
+      BUILD_TYPE: Release
+      DEEPSPEECH_URL: https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/native_client.amd64.cpu.${{matrix.deepspeech-os}}.tar.xz
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install Lua
+      if: ${{matrix.os == 'ubuntu-latest'}}
+      run: sudo apt install liblua5.1-dev
+
+    - name: Install Lua
+      if: ${{matrix.os == 'windows-latest'}}
+      run: vcpkg install lua
+
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{github.workspace}}/build ${{github.workspace}}/build/deepspeech
+
+    - name: Download DeepSpeech
+      shell: bash
+      working-directory: ${{github.workspace}}/build/deepspeech
+      run: curl -sL ${DEEPSPEECH_URL} | tar xJ
+
+    - name: Configure CMake
+      working-directory: ${{github.workspace}}/build
+      run: cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DDEEPSPEECH_PATH=${{github.workspace}}/build/deepspeech ${{matrix.toolchain}}
+
+    - name: Build
+      working-directory: ${{github.workspace}}/build
+      run: cmake --build . --config $BUILD_TYPE
