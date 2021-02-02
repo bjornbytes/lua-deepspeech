@@ -102,33 +102,33 @@ A string is returned with the decoded text.
 A stream object can be used to decode audio in real time as it arrives.  Usually you'd use this with
 audio coming from a microphone.
 
-```
+```lua
 stream = speech.newStream()
 ```
 
 Creates a new Stream.
 
-```
+```lua
 Stream:feed(table)
 Stream:feed(pointer, count)
 ```
 
 Feeds audio to the Stream.  Accepts the same arguments as `speech.decode`.
 
-```
+```lua
 text = Stream:decode()
 ```
 
 Performs an intermediate decode on the audio data fed to the Stream, returning the decoded text.
 Additional audio can continue to be fed to the Stream after this function is called.
 
-```
+```lua
 text = Stream:finish()
 ```
 
 Finishes and resets the Stream, returning the final decoded text.
 
-```
+```lua
 Stream:clear()
 ```
 
