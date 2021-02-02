@@ -46,9 +46,10 @@ Building
 ---
 
 Once you have the DeepSpeech files downloaded, build the Lua bindings in this repository.  You can
-download prebuilt files from the releases page or build them using CMake.  If you're using LÖVR you
-can also add this repository to the `plugins` folder and rebuild.  The `DEEPSPEECH_PATH` variable
-needs to be set to the path to the native client.
+download prebuilt files from the releases page (TBD, still trying to get GitHub Actions working on
+Windows) or build them using CMake.  If you're using LÖVR you can also add this repository to the
+`plugins` folder and rebuild.  The `DEEPSPEECH_PATH` variable needs to be set to the path to the
+native client.
 
 ```sh
 $ mkdir build
