@@ -31,8 +31,8 @@ DeepSpeech Setup
 - Download the speech recognition model from the same release page.  It's a huge `pbmm` file.
 
 > Note: There are multiple flavors of the native client.  The `cpu` flavor runs on the CPU, the
-`gpu` flavor runs on the GPU with CUDA, and the `tflite` flavor can use the smaller tflite model
-instead of the pbmm one.
+`cuda` flavor runs on the GPU with CUDA, and the `tflite` flavor can use the smaller tflite model
+instead of the pbmm one.  It's recommended to start with the `cpu` flavor.
 
 ### Scorer
 
@@ -64,6 +64,8 @@ The deepspeech native_client library needs to be placed somewhere that it can be
 and the lua-deepspeech library needs to be somewhere that it can be required by Lua.  For LÖVR both
 of these can be put next to the lovr executable (building as a plugin will take care of this).
 For other engines it will probably be different.
+
+> Note: on Windows the deepspeech library has a really weird name: `libdeepspeech.so`
 
 Usage
 ---
