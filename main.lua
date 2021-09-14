@@ -7,29 +7,25 @@ function lovr.load()
 
   -- Decode a sound file if provided
   if arg[1] then
-    local soundData = lovr.data.newSoundData(arg[1])
-    local sampleCount = soundData:getSampleCount()
-    local samples = soundData:getBlob():getPointer()
-    local text = lovr.speech.decode(samples, sampleCount)
+    local sound = lovr.data.newSound(arg[1])
+    local count = sound:getFrameCount()
+    local samples = sound:getBlob():getPointer()
+    local text = lovr.speech.decode(samples, count)
     print(text)
     lovr.event.quit()
     return
   end
 
-  -- Otherwise create a Microphone and feed audio to a speech decoder stream
-  local microphones = lovr.audio.getMicrophoneNames()
-  microphone = lovr.audio.newMicrophone(microphones[1], 4096, 16000, 16, 1)
-  assert(microphone, 'Could not create Microphone')
-  microphone:startRecording()
+  -- Otherwise set up microphone capture and feed audio to a speech decoder stream
+  sink = lovr.data.newSound(4096, 'f32', 'mono', 16000)
+  lovr.audio.setDevice('capture', 'default', sink)
+  lovr.audio.start('capture')
   stream = lovr.speech.newStream()
 end
 
 function lovr.update(dt)
-  if microphone:getSampleCount() > 1024 then
-    local soundData = microphone:getData()
-    local sampleCount = soundData:getSampleCount()
-    local pointer = soundData:getBlob():getPointer()
-    stream:feed(pointer, sampleCount)
+  if sink:getFrameCount() > 1024 then
+    stream:feed(sink:getFrames())
     print(stream:decode())
   end
 end

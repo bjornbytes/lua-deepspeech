@@ -13,9 +13,9 @@ lovr.speech = require 'lua-deepspeech'
 function lovr.load()
   lovr.speech.init({ model = '/path/to/model.pbmm' })
 
-  local sound = lovr.data.newSoundData('speech.ogg')
+  local sound = lovr.data.newSound('speech.ogg')
   local samples = sound:getBlob():getPointer()
-  local count = sound:getSampleCount()
+  local count = sound:getFrameCount()
 
   print(lovr.speech.decode(samples, count))
 end
